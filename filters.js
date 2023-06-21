@@ -3,14 +3,23 @@ import dotenv from "dotenv";
 import Scheduler from "./utils/scheduler.js";
 
 dotenv.config();
+const keys = [];
+let key;
+let i = 1;
+let currentKey = process.env[`ACM_${i}`];
+while (currentKey) {
+  keys.push({ key: currentKey, wait: 1000 });
+  i++;
+  currentKey = process.env[`ACM_${i}`];
+}
 
 const urlSafety = {};
 
-const SafetyRequestScheduler = new Scheduler(false, 1010);
+const SafetyRequestScheduler = new Scheduler(keys, 10);
 
 export const unsafe_url_filter = async (text) => {
   const urls = text.match(
-    /\b((https?|ftp|file):\/\/|(www|ftp)\.)[-A-Z0-9+&@#\/%?=~_|$!:,.;]*[A-Z0-9+&@#\/%=~_|$]/gi
+    /^[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/
   );
   if (!urls) return 0;
   const results = await Promise.allSettled(
@@ -29,13 +38,13 @@ export const unsafe_url_filter = async (text) => {
               },
             }
           );
-
+          // console.log(result.data.data.attributes.last_analysis_stats);
           const stats = result.data.data.attributes.last_analysis_stats;
 
           let score = 0;
           if (
             stats.suspicious > 2 ||
-            (stats.malicious > 1 && stats.malicious < 3) ||
+            (stats.malicious > 1 && stats.malicious <= 3) ||
             stats.undetected > stats.harmless * 1.5
           ) {
             score = 2;
@@ -60,14 +69,14 @@ export const unsafe_text_filter = async (text) => {
   if (text.trim().length == 0) return 0;
 
   const finalResponse = await new Promise((resolve, reject) => {
-    const reqFunc = async () => {
+    const reqFunc = async (key) => {
       const response = await axios.post(
         "https://eastasia.api.cognitive.microsoft.com/contentmoderator/moderate/v1.0/ProcessText/Screen?autocorrect=false&PII=false&classify=True&language=eng",
         text,
         {
           headers: {
             "Content-Type": "text/plain",
-            "Ocp-Apim-Subscription-Key": process.env.AZURE_CONTENT_MODERATOR,
+            "Ocp-Apim-Subscription-Key": key,
           },
         }
       );
@@ -84,10 +93,9 @@ export const unsafe_text_filter = async (text) => {
 };
 
 export const unsafe_image_filter = async (RawImage) => {
-  console.log("image filter");
   const image = RawImage.replace("data:image/jpeg;base64,", "");
   const finalResponse = await new Promise((resolve, reject) => {
-    const reqFunc = async () => {
+    const reqFunc = async (key) => {
       const response = await axios.post(
         "https://eastasia.api.cognitive.microsoft.com/contentmoderator/moderate/v1.0/ProcessImage/Evaluate",
         {
@@ -97,7 +105,7 @@ export const unsafe_image_filter = async (RawImage) => {
         {
           headers: {
             "Content-Type": "application/json",
-            "Ocp-Apim-Subscription-Key": process.env.AZURE_CONTENT_MODERATOR,
+            "Ocp-Apim-Subscription-Key": key,
           },
         }
       );
@@ -105,8 +113,6 @@ export const unsafe_image_filter = async (RawImage) => {
     };
     SafetyRequestScheduler.addRequest(reqFunc, resolve, reject);
   });
-
-  console.log(finalResponse.data);
 
   if (
     finalResponse.data.IsImageAdultClassified ||

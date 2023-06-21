@@ -38,7 +38,6 @@ app.post("/", async (req, res) => {
     }
 
     if (req.body.image) {
-      console.log("detected image");
       let image = req.body.image;
       promises.push(
         unsafe_image_filter(image).then((res) => {

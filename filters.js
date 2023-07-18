@@ -45,7 +45,8 @@ export const unsafe_url_filter = async (text) => {
           if (
             stats.suspicious > 2 ||
             (stats.malicious > 1 && stats.malicious <= 3) ||
-            stats.undetected > stats.harmless * 1.5
+            stats.undetected + stats.suspicious > stats.harmless ||
+            stats.undetected + stats.malicious > stats.harmless
           ) {
             score = 2;
           } else if (stats.malicious > 3) {
